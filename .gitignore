@@ -1,0 +1,5 @@
+target/
+src/main/resources/db.properties
+logs/
+bank.log
+.DS_Store
