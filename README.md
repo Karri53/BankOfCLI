@@ -1,26 +1,57 @@
-Yep. The first README was way too much. We can keep the substance without turning the README into the PowerPoint. 😭
-
-Your README should answer five things quickly: **What is this? What can it do? How is it built? How do I run it? How was it tested?**
-
-Use this as the **full contents of `README.md`**:
-
-````markdown
 # Bank of CLI
 
 Bank of CLI is a terminal-based banking application built with Java, JDBC, and PostgreSQL.
 
-Users can register an account, log in with an Account ID and PIN, manage their balance, transfer money, and review recent transaction history.
+The application supports authenticated Customer and Teller roles, core banking operations, transaction history, application logging, and live currency conversion through a public REST API.
 
 ## Features
 
-- Account registration and PIN-based login
-- Balance lookup
-- Deposits
-- Withdrawals with overdraft protection
-- Transfers between accounts
-- Recent transaction history
-- INFO and ERROR application logging
-- User-friendly error handling
+### Customer
+- Login with Account ID and 4-digit PIN
+- Check account balance
+- Deposit funds
+- Withdraw funds with overdraft protection
+- Transfer funds between accounts
+- View recent transaction history
+- Convert currencies using current exchange-rate data
+- Logout
+
+### Teller
+- Login with Account ID and PIN
+- Register new Customer accounts
+- Logout
+
+## Role-Based Access Control
+
+Bank of CLI uses simple Role-Based Access Control (RBAC).
+
+Each authenticated account has one of two roles:
+
+```text
+CUSTOMER
+TELLER
+```
+
+The account role determines which application features the user can access.
+
+```text
+LOGIN
+  |
+  +-- CUSTOMER
+  |      ├── Check Balance
+  |      ├── Deposit Funds
+  |      ├── Withdraw Funds
+  |      ├── Transfer Funds
+  |      ├── Transaction History
+  |      ├── Currency Converter
+  |      └── Logout
+  |
+  +-- TELLER
+         ├── Register Customer Account
+         └── Logout
+```
+
+New accounts registered by a Teller are assigned the `CUSTOMER` role by default.
 
 ## Architecture
 
@@ -30,7 +61,7 @@ The application uses a layered architecture:
 User
   ↓
 BankRepl
-API Layer
+API / Presentation Layer
   ↓
 BankService / BankServiceImpl
 Business Layer
@@ -41,42 +72,91 @@ Repository Layer
 JDBC
   ↓
 PostgreSQL
-````
+```
 
-The API layer handles terminal interaction, the Service layer contains banking rules, and the DAO layer handles database communication.
+The API layer handles terminal interaction.
 
-The project specification refers to the database layer as the Repository Layer. This project implements that responsibility using the DAO pattern.
+The Service layer contains banking rules and validation.
+
+The DAO layer handles database communication using JDBC and prepared statements.
+
+The project specification refers to the database layer as the Repository Layer. This implementation uses the DAO pattern to fulfill that responsibility.
+
+## Currency Converter
+
+Bank of CLI connects to the Frankfurter public REST API to retrieve current currency exchange-rate data.
+
+```text
+Customer
+   ↓
+Currency Converter
+   ↓
+Java HttpClient
+   ↓
+Frankfurter REST API
+   ↓
+Exchange-rate response
+   ↓
+Converted amount
+```
+
+Example:
+
+```text
+Amount to convert: 100
+From currency: USD
+To currency: EUR
+
+100.00 USD = 87.73 EUR
+```
+
+The currency converter is informational only and does not modify the customer's bank balance.
 
 ## Technologies
 
-* Java 17
-* Maven
-* PostgreSQL
-* JDBC
-* JUnit 5
-* Mockito
-* Java I/O
+- Java 17
+- Maven
+- PostgreSQL
+- JDBC
+- Java HttpClient
+- REST API integration
+- JUnit 5
+- Mockito
+- Java I/O
+- Git / GitHub
 
 ## Database
 
-Bank of CLI uses two PostgreSQL tables:
+Bank of CLI uses two PostgreSQL tables.
 
-**accounts**
+### accounts
 
-* Account ID
-* PIN
-* Balance stored in cents
+Stores:
 
-**transactions**
+- Account ID
+- PIN
+- Balance in cents
+- Role
 
-* Transaction ID
-* Account ID
-* Related Account ID
-* Transaction type
-* Amount
-* Timestamp
+Example roles:
 
-## Transaction types include:
+```text
+CUSTOMER
+TELLER
+```
+
+### transactions
+
+Stores:
+
+- Transaction ID
+- Account ID
+- Related Account ID
+- Transaction type
+- Amount in cents
+- Timestamp
+
+Transaction types include:
 
 ```text
 DEPOSIT
@@ -102,16 +182,16 @@ A transfer must successfully:
 
 1. Debit the sender
 2. Credit the receiver
-3. Record TRANSFER_OUT
-4. Record TRANSFER_IN
+3. Record `TRANSFER_OUT`
+4. Record `TRANSFER_IN`
 
-If every operation succeeds, the transaction is committed.
+If every operation succeeds, the database transaction is committed.
 
-If an operation fails, the transaction is rolled back so partial transfers do not occur.
+If an operation fails, the transaction is rolled back so a partial transfer cannot occur.
 
 ## Testing
 
-The project follows the required two-test rule for Service and Repository methods.
+The project contains automated Service and Repository tests using JUnit 5 and Mockito.
 
 ```text
 Service tests:       14
@@ -125,9 +205,14 @@ Skipped:              0
 BUILD SUCCESS
 ```
 
-Service tests use JUnit 5 and Mockito.
+The final application workflow was also manually verified for:
 
-Repository tests use JUnit 5 with PostgreSQL to verify JDBC and database behavior.
+- Customer login and role routing
+- Teller login and role routing
+- Teller-created Customer accounts
+- Customer banking menu access
+- Teller-only account registration
+- Public API currency conversion
 
 ## Logging
 
@@ -165,7 +250,42 @@ A safe template is included as:
 src/main/resources/db.properties.example
 ```
 
-The real `db.properties` file is excluded from Git because it contains credentials.
+The real `db.properties` file is excluded from Git because it contains database credentials.
+
+## Database Setup
+
+Create the PostgreSQL database:
+
+```sql
+CREATE DATABASE bankofcli;
+```
+
+The application initializes the required tables when the DAO starts.
+
+Existing installations can add the RBAC role column with:
+
+```sql
+ALTER TABLE accounts
+ADD COLUMN IF NOT EXISTS role VARCHAR(20)
+NOT NULL DEFAULT 'CUSTOMER';
+```
+
+A Teller account can be created directly in PostgreSQL for demonstration purposes:
+
+```sql
+INSERT INTO accounts (
+    account_id,
+    pin,
+    balance_cents,
+    role
+)
+VALUES (
+    900001,
+    '5678',
+    0,
+    'TELLER'
+);
+```
 
 ## Run Tests
 
@@ -173,66 +293,83 @@ The real `db.properties` file is excluded from Git because it contains credentia
 mvn clean test
 ```
 
+Expected result:
+
+```text
+Tests run: 26, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
 ## Run the Application
 
 ```bash
-mvn exec:java "-Dexec.mainClass=com.bankofcli.api.Main"
+mvn clean compile exec:java "-Dexec.mainClass=com.bankofcli.api.Main"
 ```
 
 ## View PostgreSQL Data
 
-Connect to the database:
+Connect to PostgreSQL:
 
 ```bash
 psql -h localhost -U your_database_username -d bankofcli
 ```
 
-View accounts:
+View accounts and assigned roles:
 
 ```sql
-SELECT * FROM accounts;
+SELECT account_id, balance_cents, role
+FROM accounts;
 ```
 
-View transactions:
+View transaction history:
 
 ```sql
-SELECT * FROM transactions;
+SELECT *
+FROM transactions;
 ```
 
-## Security Note
+## Security Notes
 
-This project stores PIN values directly in PostgreSQL to remain within the scope of the course implementation.
+This project demonstrates authentication and basic role-based authorization within the scope of the course.
 
-A production banking application would use secure credential hashing and additional authentication protections.
+PIN values are stored directly in PostgreSQL for this educational implementation.
 
----
+A production banking application would require additional protections such as:
+
+- Password/PIN hashing
+- Stronger authentication
+- Session management
+- Expanded authorization controls
+- Secure secret management
+- Encryption and production-grade auditing
 
 ## Key Concepts Demonstrated
-This project demonstrates:
-Java classes and objects
-Interfaces
-Encapsulation
-Collections
-Loops
-Conditional statements
-Switch statements
-Exception handling
-Dependency injection
-Layered architecture
-DAO pattern
-JDBC
-PostgreSQL
-Prepared statements
-Result sets
-SQL constraints
-Primary keys
-Foreign keys
-Database transactions
-Commit
-Rollback
-File I/O
-Application logging
-JUnit 5
-Mockito
-Positive testing
-Negative testing
+
+- Java classes and objects
+- Interfaces
+- Enums
+- Encapsulation
+- Collections
+- Loops
+- Conditional statements
+- Switch statements
+- Exception handling
+- Dependency injection
+- Layered architecture
+- DAO pattern
+- Role-Based Access Control
+- JDBC
+- PostgreSQL
+- Prepared statements
+- Result sets
+- SQL constraints
+- Primary and foreign keys
+- Database transactions
+- Commit and rollback
+- REST API integration
+- Java HttpClient
+- File I/O
+- Application logging
+- JUnit 5
+- Mockito
+- Positive and negative testing

@@ -1,8 +1,5 @@
 package com.bankofcli.persistence;
 
-import com.bankofcli.domain.Account;
-import com.bankofcli.domain.Transaction;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -10,6 +7,10 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.bankofcli.domain.Account;
+import com.bankofcli.domain.Role;
+import com.bankofcli.domain.Transaction;
 
 public class BankDAOImpl implements BankDAO {
 
@@ -22,6 +23,7 @@ public class BankDAOImpl implements BankDAO {
                 account_id BIGINT PRIMARY KEY,
                 pin VARCHAR(4) NOT NULL,
                 balance_cents BIGINT NOT NULL DEFAULT 0,
+                role VARCHAR(20) NOT NULL DEFAULT 'CUSTOMER',
 
                 CONSTRAINT check_balance_nonnegative
                     CHECK (balance_cents >= 0)
@@ -56,13 +58,21 @@ public class BankDAOImpl implements BankDAO {
 
     // SQL for creating a new bank account.
     private static final String INSERT_ACCOUNT_SQL = """
-            INSERT INTO accounts (account_id, pin, balance_cents)
-            VALUES (?, ?, ?)
+            INSERT INTO accounts (
+                account_id,
+                pin,
+                balance_cents,
+                role
+            )
+            VALUES (?, ?, ?, ?)
             """;
 
     // SQL for finding one account by its ID.
     private static final String FIND_ACCOUNT_SQL = """
-            SELECT account_id, pin, balance_cents
+            SELECT account_id,
+                   pin,
+                   balance_cents,
+                   role
             FROM accounts
             WHERE account_id = ?
             """;
@@ -129,16 +139,14 @@ public class BankDAOImpl implements BankDAO {
     public void addAccount(Account account) {
 
         try (
-                Connection connection =
-                        ConnectionFactory.getConnectionFactory().getConnection();
+                Connection connection = ConnectionFactory.getConnectionFactory().getConnection();
 
-                PreparedStatement statement =
-                        connection.prepareStatement(INSERT_ACCOUNT_SQL)
-        ) {
+                PreparedStatement statement = connection.prepareStatement(INSERT_ACCOUNT_SQL)) {
 
             statement.setLong(1, account.getAccountId());
             statement.setString(2, account.getPin());
             statement.setLong(3, account.getBalanceCents());
+            statement.setString(4, account.getRole().name());
 
             statement.executeUpdate();
 
@@ -154,12 +162,9 @@ public class BankDAOImpl implements BankDAO {
     public Account getAccountById(long accountId) {
 
         try (
-                Connection connection =
-                        ConnectionFactory.getConnectionFactory().getConnection();
+                Connection connection = ConnectionFactory.getConnectionFactory().getConnection();
 
-                PreparedStatement statement =
-                        connection.prepareStatement(FIND_ACCOUNT_SQL)
-        ) {
+                PreparedStatement statement = connection.prepareStatement(FIND_ACCOUNT_SQL)) {
 
             statement.setLong(1, accountId);
 
@@ -183,8 +188,7 @@ public class BankDAOImpl implements BankDAO {
     @Override
     public void deposit(long accountId, long amountCents) {
 
-        try (Connection connection =
-                     ConnectionFactory.getConnectionFactory().getConnection()) {
+        try (Connection connection = ConnectionFactory.getConnectionFactory().getConnection()) {
 
             /*
              * Use one database transaction so the balance update
@@ -193,9 +197,7 @@ public class BankDAOImpl implements BankDAO {
             connection.setAutoCommit(false);
 
             try (
-                    PreparedStatement statement =
-                            connection.prepareStatement(DEPOSIT_SQL)
-            ) {
+                    PreparedStatement statement = connection.prepareStatement(DEPOSIT_SQL)) {
 
                 statement.setLong(1, amountCents);
                 statement.setLong(2, accountId);
@@ -235,15 +237,12 @@ public class BankDAOImpl implements BankDAO {
     @Override
     public boolean withdraw(long accountId, long amountCents) {
 
-        try (Connection connection =
-                     ConnectionFactory.getConnectionFactory().getConnection()) {
+        try (Connection connection = ConnectionFactory.getConnectionFactory().getConnection()) {
 
             connection.setAutoCommit(false);
 
             try (
-                    PreparedStatement statement =
-                            connection.prepareStatement(WITHDRAW_SQL)
-            ) {
+                    PreparedStatement statement = connection.prepareStatement(WITHDRAW_SQL)) {
 
                 statement.setLong(1, amountCents);
                 statement.setLong(2, accountId);
@@ -292,8 +291,7 @@ public class BankDAOImpl implements BankDAO {
             long toAccountId,
             long amountCents) {
 
-        try (Connection connection =
-                     ConnectionFactory.getConnectionFactory().getConnection()) {
+        try (Connection connection = ConnectionFactory.getConnectionFactory().getConnection()) {
 
             /*
              * Turn off auto-commit so the transfer becomes
@@ -302,12 +300,9 @@ public class BankDAOImpl implements BankDAO {
             connection.setAutoCommit(false);
 
             try (
-                    PreparedStatement debitStatement =
-                            connection.prepareStatement(WITHDRAW_SQL);
+                    PreparedStatement debitStatement = connection.prepareStatement(WITHDRAW_SQL);
 
-                    PreparedStatement creditStatement =
-                            connection.prepareStatement(CREDIT_ACCOUNT_SQL)
-            ) {
+                    PreparedStatement creditStatement = connection.prepareStatement(CREDIT_ACCOUNT_SQL)) {
 
                 // Step 1: Remove money from the sender.
                 debitStatement.setLong(1, amountCents);
@@ -382,12 +377,9 @@ public class BankDAOImpl implements BankDAO {
         List<Transaction> transactions = new ArrayList<>();
 
         try (
-                Connection connection =
-                        ConnectionFactory.getConnectionFactory().getConnection();
+                Connection connection = ConnectionFactory.getConnectionFactory().getConnection();
 
-                PreparedStatement statement =
-                        connection.prepareStatement(FIND_RECENT_TRANSACTIONS_SQL)
-        ) {
+                PreparedStatement statement = connection.prepareStatement(FIND_RECENT_TRANSACTIONS_SQL)) {
 
             statement.setLong(1, accountId);
 
@@ -417,17 +409,13 @@ public class BankDAOImpl implements BankDAO {
     private void initializeSchema() {
 
         try (
-                Connection connection =
-                        ConnectionFactory.getConnectionFactory().getConnection();
+                Connection connection = ConnectionFactory.getConnectionFactory().getConnection();
 
-                PreparedStatement accountStatement =
-                        connection.prepareStatement(
-                                CREATE_ACCOUNTS_TABLE_SQL);
+                PreparedStatement accountStatement = connection.prepareStatement(
+                        CREATE_ACCOUNTS_TABLE_SQL);
 
-                PreparedStatement transactionStatement =
-                        connection.prepareStatement(
-                                CREATE_TRANSACTIONS_TABLE_SQL)
-        ) {
+                PreparedStatement transactionStatement = connection.prepareStatement(
+                        CREATE_TRANSACTIONS_TABLE_SQL)) {
 
             accountStatement.executeUpdate();
             transactionStatement.executeUpdate();
@@ -454,10 +442,8 @@ public class BankDAOImpl implements BankDAO {
             long amountCents) throws SQLException {
 
         try (
-                PreparedStatement statement =
-                        connection.prepareStatement(
-                                INSERT_TRANSACTION_SQL)
-        ) {
+                PreparedStatement statement = connection.prepareStatement(
+                        INSERT_TRANSACTION_SQL)) {
 
             statement.setLong(1, accountId);
 
@@ -479,13 +465,16 @@ public class BankDAOImpl implements BankDAO {
     }
 
     // Convert one SQL account row into an Account Java object.
-    private Account mapAccount(ResultSet resultSet)
+    private Account mapAccount(
+            ResultSet resultSet)
             throws SQLException {
 
         return new Account(
                 resultSet.getLong("account_id"),
                 resultSet.getString("pin"),
-                resultSet.getLong("balance_cents"));
+                resultSet.getLong("balance_cents"),
+                Role.valueOf(
+                        resultSet.getString("role")));
     }
 
     // Convert one SQL transaction row into a Transaction Java object.
@@ -496,10 +485,9 @@ public class BankDAOImpl implements BankDAO {
          * getObject() is used for related_account_id because
          * that database value may be NULL.
          */
-        Long relatedAccountId =
-                resultSet.getObject(
-                        "related_account_id",
-                        Long.class);
+        Long relatedAccountId = resultSet.getObject(
+                "related_account_id",
+                Long.class);
 
         return new Transaction(
                 resultSet.getLong("transaction_id"),

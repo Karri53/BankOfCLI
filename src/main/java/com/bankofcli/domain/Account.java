@@ -5,16 +5,44 @@ public class Account {
     // Unique ID used to identify the bank account.
     private long accountId;
 
-    // Store the PIN as a String so values such as "0123" keep the leading zero.
+    // Store the PIN as a String so leading zeros are preserved.
     private String pin;
 
-    // Store money as whole cents instead of using floating-point values.
+    // Store money as whole cents.
     private long balanceCents;
 
-    public Account(long accountId, String pin, long balanceCents) {
+    // Determines which features this account may access.
+    private Role role;
+
+    /*
+     * Existing account creation defaults
+     * to the CUSTOMER role.
+     */
+    public Account(
+            long accountId,
+            String pin,
+            long balanceCents) {
+
+        this(
+                accountId,
+                pin,
+                balanceCents,
+                Role.CUSTOMER);
+    }
+
+    /*
+     * Used when the role is already known.
+     */
+    public Account(
+            long accountId,
+            String pin,
+            long balanceCents,
+            Role role) {
+
         this.accountId = accountId;
         this.pin = pin;
         this.balanceCents = balanceCents;
+        this.role = role;
     }
 
     public long getAccountId() {
@@ -27,6 +55,10 @@ public class Account {
 
     public long getBalanceCents() {
         return balanceCents;
+    }
+
+    public Role getRole() {
+        return role;
     }
 
     @Override
